@@ -1,4 +1,4 @@
-goreadability
+Goreadability 0.1
 =============
 
-Readability implementation in Go
+Arc90 Readability implementation in Golang

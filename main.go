@@ -138,7 +138,9 @@ func (n *treeNode) LinkDensity() int {
 	linkLength := 0
 	for i := 0; i < len(links); i += 1 {
 		if val, ok := n.Attrs["href"]; ok {
+			fmt.Printf("%#v", val)
 			linkLength = linkLength + len(val)
+
 		}
 	}
 	return linkLength / length
@@ -160,12 +162,24 @@ func (n *treeNode) FindByType(t string) []*treeNode {
 	return result
 }
 
-func (n *treeNode) FindByClass(class string) {
+func (n *treeNode) FindByClass(class string) []*treeNode {
+	nClass := ""
+	result := []*treeNode{}
 
-}
+	if val, ok := n.Attrs["class"]; ok {
+		nClass = val
+	}
+	if nClass == class {
+		result = append(result, n)
+	}
+	if len(n.Children) < 1 {
+		return result
+	}
+	for i := 0; i < len(n.Children); i += 1 {
+		result = append(result, n.Children[i].FindByClass(class)...)
+	}
 
-func (n *treeNode) CalculateScore() {
-
+	return result
 }
 
 var stack *Stack
@@ -211,23 +225,15 @@ var regexps = map[string]*regexp.Regexp{
 
 var topNode *treeNode
 
-func perror(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func log(msg string, err interface{}) {
-	fmt.Printf(msg+"%#v\n", err)
-}
-
 func getPage(url string) io.ReadCloser {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
 	res, err := client.Get(url)
-	perror(err)
+	if err != nil {
+		panic(err)
+	}
 
 	return res.Body
 }
@@ -342,7 +348,7 @@ func traverse(node *treeNode) {
 
 func main() {
 	stack = new(Stack)
-	page := getPage("http://www.theguardian.com/world/2014/apr/27/ukraine-kidnapped-observers-slavyansk-vyacheslav-ponomarev")
+	page := getPage("http://finance.ce.cn/rolling/201405/04/t20140504_2752995.shtml")
 	root := parseHtml(page)
 	traverse(root)
 	fmt.Printf("%#v\n", topNode.Html())
