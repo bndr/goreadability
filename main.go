@@ -321,9 +321,7 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 		if val, ok := parent.Attrs["id"]; ok {
 			classAndId += val
 		}
-
-		if parent.Type == "p" || parent.Type == "pre" || parent.Type == "div" {
-
+		if parent.Type == "p" || parent.Type == "pre" {
 			commas := regexps["commas"].FindAllString(parent.Text(), 15)
 			score := float64(len(commas)) + math.Min(float64(len(parent.Text()))/100, 3)
 
@@ -376,7 +374,6 @@ func initializeNode(n *treeNode) {
 		if n.Type == "article" {
 			n.Score = n.Score + 25
 		}
-		fmt.Printf("Score %#f, Node: %#v\n\n", n.Score, n)
 	}
 }
 
@@ -391,13 +388,9 @@ func parseHtml(r io.ReadCloser) *treeNode {
 }
 
 func treeToArray(root *treeNode) []*treeNode {
-	if len(root.Children) < 1 {
-		return []*treeNode{root}
-	}
 	children := []*treeNode{}
-
+	children = append(children, root)
 	for i := 0; i < len(root.Children); i += 1 {
-		treeToArray(root.Children[i])
 		children = append(children, treeToArray(root.Children[i])...)
 	}
 	return children
@@ -409,21 +402,16 @@ func getTopCandidate(nodes []*treeNode) *treeNode {
 		if top.Score < nodes[i].Score {
 			top = nodes[i]
 		}
-		fmt.Printf("%#v\n", top.Score)
 	}
 	return top
-}
-
-func buildArticle(node *treeNode) {
-
 }
 
 // Testing
 func main() {
 	stack = new(Stack)
-	page := getPage("http://www.theguardian.com/world/2014/apr/27/ukraine-kidnapped-observers-slavyansk-vyacheslav-ponomarev")
+	page := getPage("http://www.spiegel.de/wirtschaft/unternehmen/russland-vtb-bank-erhoeht-zinsen-fuer-deutsche-sparer-a-967807.html")
 	root := parseHtml(page)
 	nodes := treeToArray(root)
 	top := getTopCandidate(nodes)
-	fmt.Printf("%#v\n", top.Parent.Html())
+	fmt.Printf("%#v\n", top.Html())
 }
