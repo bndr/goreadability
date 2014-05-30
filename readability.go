@@ -1,10 +1,9 @@
-package main
+package goreadability
 
 import (
 	"bytes"
 	"code.google.com/p/go.net/html"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -267,19 +266,6 @@ var regexps = map[string]*regexp.Regexp{
 
 var topNode *treeNode
 
-func getPage(url string) io.ReadCloser {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	client := &http.Client{Transport: tr}
-	res, err := client.Get(url)
-	if err != nil {
-		panic(err)
-	}
-
-	return res.Body
-}
-
 func parseNode(tokenizer *html.Tokenizer) bool {
 	tokenType := tokenizer.Next()
 	d := tokenizer.Token()
@@ -377,6 +363,19 @@ func initializeNode(n *treeNode) {
 	}
 }
 
+func getPage(url string) io.ReadCloser {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	res, err := client.Get(url)
+	if err != nil {
+		panic(err)
+	}
+
+	return res.Body
+}
+
 // Main method. Tokenize the html and parse it. Returns the root node
 func parseHtml(r io.ReadCloser) *treeNode {
 	defer r.Close()
@@ -387,31 +386,25 @@ func parseHtml(r io.ReadCloser) *treeNode {
 	return &node
 }
 
-func treeToArray(root *treeNode) []*treeNode {
-	children := []*treeNode{}
-	children = append(children, root)
-	for i := 0; i < len(root.Children); i += 1 {
-		children = append(children, treeToArray(root.Children[i])...)
-	}
-	return children
-}
+// Get the top candidate
+func getTopCandidate(root *treeNode, top *treeNode) *treeNode {
 
-func getTopCandidate(nodes []*treeNode) *treeNode {
-	top := nodes[0]
-	for i := 0; i < len(nodes); i += 1 {
-		if top.Score < nodes[i].Score {
-			top = nodes[i]
-		}
+	if root.Score > top.Score {
+		top = root
 	}
+
+	for i := 0; i < len(root.Children); i += 1 {
+		top = getTopCandidate(root.Children[i], top)
+	}
+
 	return top
 }
 
-// Testing
-func main() {
+// Exported method
+// Accepts either a link or HTML string (TODO) or io.Reader (TODO)
+func Read(html string) *treeNode {
 	stack = new(Stack)
-	page := getPage("http://www.spiegel.de/wirtschaft/unternehmen/russland-vtb-bank-erhoeht-zinsen-fuer-deutsche-sparer-a-967807.html")
+	page := getPage(html)
 	root := parseHtml(page)
-	nodes := treeToArray(root)
-	top := getTopCandidate(nodes)
-	fmt.Printf("%#v\n", top.Html())
+	return getTopCandidate(root, root)
 }
