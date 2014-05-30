@@ -22,6 +22,8 @@ type treeNode struct {
 	Position int
 }
 
+// Stack implementation, to keep all Nodes in the right order
+
 type Stack struct {
 	top  *Element
 	size int
@@ -64,6 +66,11 @@ func (s *Stack) Peek() (value *treeNode) {
 	return &treeNode{}
 }
 
+var stack *Stack
+
+// Node Methods
+
+// Get the Text content of each node Recursively
 func (n *treeNode) Text() string {
 
 	var textBuffer bytes.Buffer
@@ -97,6 +104,7 @@ func (n *treeNode) Text() string {
 	return textBuffer.String()
 }
 
+// Get the Html content of each node recursively
 func (n *treeNode) Html() string {
 	if elementsToIgnore[n.Type] {
 		return ""
@@ -145,6 +153,8 @@ func (n *treeNode) Html() string {
 	return htmlBuffer.String()
 }
 
+// remove a node and all of its children
+// Should be no memory leaks here
 func (n *treeNode) Remove() {
 	parent := n.Parent
 	if len(parent.Children) == 1 {
@@ -161,6 +171,7 @@ func (n *treeNode) Remove() {
 
 }
 
+// Calculate the Link density of the node
 func (n *treeNode) LinkDensity() int {
 	links := n.FindByType("a")
 	length := len(n.Text()) + 1
@@ -176,6 +187,7 @@ func (n *treeNode) LinkDensity() int {
 
 }
 
+// Find Node by Type. Case sensitive
 func (n *treeNode) FindByType(t string) []*treeNode {
 	result := []*treeNode{}
 	if n.Type == t {
@@ -191,6 +203,7 @@ func (n *treeNode) FindByType(t string) []*treeNode {
 	return result
 }
 
+// Find Node by Class. Case sensitive
 func (n *treeNode) FindByClass(class string) []*treeNode {
 	nClass := ""
 	result := []*treeNode{}
@@ -211,8 +224,7 @@ func (n *treeNode) FindByClass(class string) []*treeNode {
 	return result
 }
 
-var stack *Stack
-
+// Elements that are assumed to have no Data in them.
 var voidElements = map[string]bool{
 	"meta":  true,
 	"br":    true,
@@ -222,6 +234,7 @@ var voidElements = map[string]bool{
 	"img":   true,
 }
 
+// Elements that will be ignored when parsing the Html
 var elementsToIgnore = map[string]bool{
 	"meta":     true,
 	"iframe":   true,
@@ -232,11 +245,13 @@ var elementsToIgnore = map[string]bool{
 	"object":   true,
 }
 
+// Weights of different types of nodes based on their content value
 var nodeTypes = map[string]float64{"div": 5, "pre": 3, "td": 3, "blockquote": 3, "address": -3, "ol": -3, "ul": -3,
 	"dl": -3, "dd": -3, "dt": -3, "li": -3, "h1": -5,
 	"h2": -5, "h3": -5, "h4": -5, "h5": -5, "h6": -5, "th": -6,
 }
 
+// General Regexps
 var regexps = map[string]*regexp.Regexp{
 	"unlikelyCandidates":     regexp.MustCompile("/combx|pager|comment|disqus|foot|header|menu|meta|nav|rss|shoutbox|sidebar|sponsor|share|bookmark|social|advert|leaderboard|instapaper_ignore|entry-unrelated/i"),
 	"okMaybeItsACandidateRe": regexp.MustCompile("/and|article|body|column|main/i"),
@@ -276,36 +291,42 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 	case html.ErrorToken:
 		return true
 	case html.StartTagToken: // <tag>
-		child := treeNode{"", []*treeNode{}, parent, d.Data, 0, map[string]string{}, len(parent.Data)}
-		for i := 0; i < len(d.Attr); i++ {
-			current := d.Attr[i]
-			child.Attrs[current.Key] = current.Val
-		}
-		initializeNode(&child)
-		parent.Children = append(parent.Children, &child)
 		if !voidElements[d.Data] {
+			child := treeNode{"", []*treeNode{}, parent, d.Data, 0, map[string]string{}, len(parent.Data)}
+			// Save the attributes
+			for i := 0; i < len(d.Attr); i++ {
+				current := d.Attr[i]
+				child.Attrs[current.Key] = current.Val
+			}
+
+			// Score the node based on classname
+			initializeNode(&child)
+
+			parent.Children = append(parent.Children, &child)
 			stack.Push(&child)
 		}
 		return parseNode(tokenizer)
-	case html.TextToken: // text between start and end tag
+	case html.TextToken:
+		// Ignore the empty nodes
 		if len(d.Data) > 1 {
-
 			parent.Data = parent.Data + strings.TrimSpace(d.Data)
 		}
 		return parseNode(tokenizer)
 	case html.EndTagToken: // </tag>
 		classAndId := ""
+
 		if val, ok := parent.Attrs["class"]; ok {
 			classAndId += val
 		}
+
 		if val, ok := parent.Attrs["id"]; ok {
 			classAndId += val
 		}
+
 		if parent.Type == "p" || parent.Type == "pre" {
-			//commas := regexps["commas"].FindAllString(parent.Text(), 15)
-			//score := float64(len(commas))
-			//score = score + math.Min(float64(len(parent.Text()))/100, 3)
-			score := float64(math.Min(1, 2))
+			commas := regexps["commas"].FindAllString(parent.Text(), 15)
+			score := float64(len(commas)) + math.Min(float64(len(parent.Text()))/100, 3)
+
 			if parent.Parent != nil {
 				parent.Parent.Score = parent.Parent.Score + score
 			}
@@ -315,6 +336,8 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 			}
 		}
 		stack.Pop()
+
+		// Remove unlikely nodes
 		if (parent.Type == "head" || parent.Type == "footer") || regexps["unlikelyCandidates"].MatchString(classAndId) && !regexps["okMaybeItsACandidateRe"].MatchString(classAndId) {
 			parent.Remove()
 		}
@@ -329,6 +352,7 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 	}
 }
 
+// Score the node based on Class, ID and type of node
 func initializeNode(n *treeNode) {
 	if val, ok := nodeTypes[n.Type]; ok {
 		n.Score = n.Score + val
@@ -351,6 +375,7 @@ func initializeNode(n *treeNode) {
 	}
 }
 
+// Main method. Tokenize the html and parse it. Returns the root node
 func parseHtml(r io.ReadCloser) *treeNode {
 	defer r.Close()
 	d := html.NewTokenizer(r)
@@ -360,6 +385,7 @@ func parseHtml(r io.ReadCloser) *treeNode {
 	return &node
 }
 
+// Traverse the tree
 func traverse(node *treeNode) {
 	if len(node.Children) < 1 {
 		return
@@ -376,6 +402,7 @@ func traverse(node *treeNode) {
 	}
 }
 
+// Testing
 func main() {
 	stack = new(Stack)
 	page := getPage("http://www.theguardian.com/world/2014/apr/27/ukraine-kidnapped-observers-slavyansk-vyacheslav-ponomarev")
