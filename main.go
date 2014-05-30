@@ -172,18 +172,16 @@ func (n *treeNode) Remove() {
 }
 
 // Calculate the Link density of the node
-func (n *treeNode) LinkDensity() int {
+func (n *treeNode) LinkDensity() float64 {
 	links := n.FindByType("a")
 	length := len(n.Text()) + 1
-	linkLength := 1
+	var linkLength float64 = 1
 	for i := 0; i < len(links); i += 1 {
-		if val, ok := n.Attrs["href"]; ok {
-			fmt.Printf("%#v", val)
-			linkLength = linkLength + len(val)
-
+		if _, ok := links[i].Attrs["href"]; ok {
+			linkLength = linkLength + float64(len(links[i].Text()))
 		}
 	}
-	return linkLength / length
+	return linkLength / float64(length)
 
 }
 
@@ -293,6 +291,7 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 	case html.StartTagToken: // <tag>
 		if !voidElements[d.Data] {
 			child := treeNode{"", []*treeNode{}, parent, d.Data, 0, map[string]string{}, len(parent.Data)}
+
 			// Save the attributes
 			for i := 0; i < len(d.Attr); i++ {
 				current := d.Attr[i]
@@ -323,22 +322,27 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 			classAndId += val
 		}
 
-		if parent.Type == "p" || parent.Type == "pre" {
+		if parent.Type == "p" || parent.Type == "pre" || parent.Type == "div" {
+
 			commas := regexps["commas"].FindAllString(parent.Text(), 15)
 			score := float64(len(commas)) + math.Min(float64(len(parent.Text()))/100, 3)
 
+			linkDensity := parent.LinkDensity()
+			total := float64(1 - linkDensity)
+			total = total * (parent.Score + score)
+
 			if parent.Parent != nil {
-				parent.Parent.Score = parent.Parent.Score + score
+				parent.Parent.Score = parent.Parent.Score + total
 			}
 
 			if parent.Parent != nil && parent.Parent.Parent != nil {
-				parent.Parent.Parent.Score = parent.Parent.Parent.Score + score/2
+				parent.Parent.Parent.Score = parent.Parent.Parent.Score + total/2
 			}
 		}
 		stack.Pop()
 
 		// Remove unlikely nodes
-		if (parent.Type == "head" || parent.Type == "footer") || regexps["unlikelyCandidates"].MatchString(classAndId) && !regexps["okMaybeItsACandidateRe"].MatchString(classAndId) {
+		if (parent.Type == "head" || parent.Type == "footer") || (regexps["unlikelyCandidates"].MatchString(classAndId) && !regexps["okMaybeItsACandidateRe"].MatchString(classAndId)) {
 			parent.Remove()
 		}
 		return parseNode(tokenizer)
@@ -372,6 +376,7 @@ func initializeNode(n *treeNode) {
 		if n.Type == "article" {
 			n.Score = n.Score + 25
 		}
+		fmt.Printf("Score %#f, Node: %#v\n\n", n.Score, n)
 	}
 }
 
@@ -385,21 +390,32 @@ func parseHtml(r io.ReadCloser) *treeNode {
 	return &node
 }
 
-// Traverse the tree
-func traverse(node *treeNode) {
-	if len(node.Children) < 1 {
-		return
+func treeToArray(root *treeNode) []*treeNode {
+	if len(root.Children) < 1 {
+		return []*treeNode{root}
 	}
-	if topNode == nil {
-		topNode = node
-	}
-	if topNode.Score < node.Score {
-		topNode = node
-	}
+	children := []*treeNode{}
 
-	for i := 0; i < len(node.Children); i += 1 {
-		traverse(node.Children[i])
+	for i := 0; i < len(root.Children); i += 1 {
+		treeToArray(root.Children[i])
+		children = append(children, treeToArray(root.Children[i])...)
 	}
+	return children
+}
+
+func getTopCandidate(nodes []*treeNode) *treeNode {
+	top := nodes[0]
+	for i := 0; i < len(nodes); i += 1 {
+		if top.Score < nodes[i].Score {
+			top = nodes[i]
+		}
+		fmt.Printf("%#v\n", top.Score)
+	}
+	return top
+}
+
+func buildArticle(node *treeNode) {
+
 }
 
 // Testing
@@ -407,7 +423,7 @@ func main() {
 	stack = new(Stack)
 	page := getPage("http://www.theguardian.com/world/2014/apr/27/ukraine-kidnapped-observers-slavyansk-vyacheslav-ponomarev")
 	root := parseHtml(page)
-	traverse(root)
-	fmt.Printf("%#v\n", topNode.Text())
-	//root.Html()
+	nodes := treeToArray(root)
+	top := getTopCandidate(nodes)
+	fmt.Printf("%#v\n", top.Parent.Html())
 }
