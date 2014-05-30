@@ -65,14 +65,36 @@ func (s *Stack) Peek() (value *treeNode) {
 }
 
 func (n *treeNode) Text() string {
-	text := n.Data
+
+	var textBuffer bytes.Buffer
+
 	if elementsToIgnore[n.Type] {
 		return ""
 	}
-	for i := 0; i < len(n.Children); i += 1 {
-		text = text + " " + n.Children[i].Text()
+	if len(n.Children) < 1 {
+		textBuffer.WriteString(" " + n.Data)
 	}
-	return text
+
+	end := len(n.Data)
+	start := 0
+	for i := 0; i < len(n.Children); i += 1 {
+		newText := n.Children[i].Text()
+
+		if i+1 < len(n.Children) {
+			end = n.Children[i+1].Position
+		} else {
+			end = len(n.Data)
+		}
+		if i > 0 {
+			start = n.Children[i].Position
+		}
+
+		textBuffer.WriteString(n.Data[start:n.Children[i].Position])
+		textBuffer.WriteString(newText)
+		textBuffer.WriteString(n.Data[n.Children[i].Position:end])
+	}
+	textBuffer.WriteString(" ")
+	return textBuffer.String()
 }
 
 func (n *treeNode) Html() string {
@@ -84,7 +106,7 @@ func (n *treeNode) Html() string {
 	}
 	var htmlBuffer bytes.Buffer
 
-	htmlBuffer.WriteString("<")
+	htmlBuffer.WriteString(" <")
 	htmlBuffer.WriteString(n.Type)
 	for k, v := range n.Attrs {
 		htmlBuffer.WriteString(" ")
@@ -98,20 +120,27 @@ func (n *treeNode) Html() string {
 	if len(n.Children) == 0 {
 		htmlBuffer.WriteString(n.Data)
 	} else {
+		end := len(n.Data)
+		start := 0
 		for i := 0; i < len(n.Children); i += 1 {
 			newHtml := n.Children[i].Html()
-			end := len(n.Data)
 
 			if i+1 < len(n.Children) {
 				end = n.Children[i+1].Position
+			} else {
+				end = len(n.Data)
+			}
+			if i > 0 {
+				start = n.Children[i].Position
 			}
 
-			htmlBuffer.WriteString(n.Data[:n.Children[i].Position])
+			htmlBuffer.WriteString(n.Data[start:n.Children[i].Position])
 			htmlBuffer.WriteString(newHtml)
 			htmlBuffer.WriteString(n.Data[n.Children[i].Position:end])
+
 		}
 	}
-	htmlBuffer.WriteString("</" + n.Type + ">")
+	htmlBuffer.WriteString("</" + n.Type + "> ")
 
 	return htmlBuffer.String()
 }
@@ -134,8 +163,8 @@ func (n *treeNode) Remove() {
 
 func (n *treeNode) LinkDensity() int {
 	links := n.FindByType("a")
-	length := len(n.Text())
-	linkLength := 0
+	length := len(n.Text()) + 1
+	linkLength := 1
 	for i := 0; i < len(links); i += 1 {
 		if val, ok := n.Attrs["href"]; ok {
 			fmt.Printf("%#v", val)
@@ -273,9 +302,10 @@ func parseNode(tokenizer *html.Tokenizer) bool {
 			classAndId += val
 		}
 		if parent.Type == "p" || parent.Type == "pre" {
-			commas := regexps["commas"].FindAllString(parent.Text(), 15)
-			score := float64(len(commas))
-			score = score + math.Min(float64(len(parent.Text()))/100, 3)
+			//commas := regexps["commas"].FindAllString(parent.Text(), 15)
+			//score := float64(len(commas))
+			//score = score + math.Min(float64(len(parent.Text()))/100, 3)
+			score := float64(math.Min(1, 2))
 			if parent.Parent != nil {
 				parent.Parent.Score = parent.Parent.Score + score
 			}
@@ -348,10 +378,9 @@ func traverse(node *treeNode) {
 
 func main() {
 	stack = new(Stack)
-	page := getPage("http://finance.ce.cn/rolling/201405/04/t20140504_2752995.shtml")
+	page := getPage("http://www.theguardian.com/world/2014/apr/27/ukraine-kidnapped-observers-slavyansk-vyacheslav-ponomarev")
 	root := parseHtml(page)
 	traverse(root)
-	fmt.Printf("%#v\n", topNode.Html())
-	fmt.Printf("%#v\n", topNode.LinkDensity())
+	fmt.Printf("%#v\n", topNode.Text())
 	//root.Html()
 }
