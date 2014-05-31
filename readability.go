@@ -5,8 +5,10 @@ import (
 	"code.google.com/p/go.net/html"
 	"crypto/tls"
 	"io"
+	"log"
 	"math"
 	"net/http"
+	"net/http/cookiejar"
 	"regexp"
 	"strings"
 )
@@ -108,7 +110,7 @@ func (n *treeNode) Html() string {
 	if elementsToIgnore[n.Type] {
 		return ""
 	}
-	if n.Type == "root" {
+	if n.Type == "root" && len(n.Children) > 0 {
 		return n.Children[0].Html()
 	}
 	var htmlBuffer bytes.Buffer
@@ -363,17 +365,18 @@ func initializeNode(n *treeNode) {
 	}
 }
 
-func getPage(url string) io.ReadCloser {
+func getPage(url string) (io.ReadCloser, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	client := &http.Client{Transport: tr}
+	cookieJar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: cookieJar, Transport: tr}
 	res, err := client.Get(url)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return res.Body
+	return res.Body, nil
 }
 
 // Main method. Tokenize the html and parse it. Returns the root node
@@ -404,7 +407,12 @@ func getTopCandidate(root *treeNode, top *treeNode) *treeNode {
 // Accepts either a link or HTML string (TODO) or io.Reader (TODO)
 func Read(html string) *treeNode {
 	stack = new(Stack)
-	page := getPage(html)
+	page, err := getPage(html)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	root := parseHtml(page)
 	return getTopCandidate(root, root)
 }
