@@ -4,6 +4,10 @@ Goreadability
 ## Overview
 Arc90 Readability implementation in Golang
 
+## Status
+
+Not ready yet.
+
 ## Installation
 To instal goreadability use go get.
 
